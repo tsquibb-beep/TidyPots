@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Builds the mod and installs it into the game's mods directory.
+#
+# Usage: ./deploy.sh [path to "Slay the Spire 2"]
+set -euo pipefail
+
+GAME_DIR="${1:-/mnt/t/SteamLibrary/steamapps/common/Slay the Spire 2}"
+MOD_ID="TidyPots"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTNET="${DOTNET:-$HOME/.dotnet/dotnet}"
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+
+if [[ ! -f "$GAME_DIR/data_sts2_windows_x86_64/sts2.dll" ]]; then
+    echo "error: no StS2 install at '$GAME_DIR'" >&2
+    exit 1
+fi
+
+TARGET="$GAME_DIR/mods/$MOD_ID"
+
+"$DOTNET" build "$PROJECT_DIR/TidyPots.csproj" -c Release -p:Sts2Dir="$GAME_DIR"
+
+mkdir -p "$TARGET"
+
+# Windows keeps the DLL locked while the game is running, so the copy fails and you end up
+# testing the previous build without noticing. Say so plainly.
+if ! cp "$PROJECT_DIR/bin/Release/net9.0/$MOD_ID.dll" "$TARGET/" 2>/dev/null; then
+    echo "error: could not replace $MOD_ID.dll - close Slay the Spire 2 first (it locks the file while running)." >&2
+    exit 1
+fi
+cp "$PROJECT_DIR/$MOD_ID.json" "$TARGET/"
+
+echo "Installed $MOD_ID to $TARGET"
+ls -la "$TARGET"

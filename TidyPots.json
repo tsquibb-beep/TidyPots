@@ -1,0 +1,12 @@
+{
+    "id": "TidyPots",
+    "name": "TidyPots",
+    "author": "Tomasapan",
+    "description": "Closes the gaps in your potion belt: potions always sit packed to the left. Purely visual, so it is safe in co-op.",
+    "version": "0.1.0",
+    "has_pck": false,
+    "has_dll": true,
+    "dependencies": [],
+    "affects_gameplay": false,
+    "min_game_version": "0.107.1"
+}
