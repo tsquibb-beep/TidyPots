@@ -9,7 +9,8 @@ namespace TidyPots;
 
 /// <summary>
 /// `tidy diag` shows the real slots next to the on-screen order; `tidy apply` forces a re-sort;
-/// `tidy slosh n` plays discard slosh n at the hold's pitch, to tell the clips apart by ear.
+/// `tidy slosh n` plays discard slosh n at the hold's pitch, to tell the clips apart by ear;
+/// `tidy splash n` plays end-of-discard splash n.
 ///
 /// The dev console discovers commands in loaded mods by reflection, so shipping this public
 /// class with a parameterless constructor is enough to register it.
@@ -18,7 +19,7 @@ public class TidyConsoleCmd : AbstractConsoleCmd
 {
     public override string CmdName => "tidy";
 
-    public override string Args => "[diag|apply|slosh <n>]";
+    public override string Args => "[diag|apply|slosh <n>|splash <n>]";
 
     public override string Description => "TidyPots: inspect or re-sort the potion belt.";
 
@@ -30,6 +31,11 @@ public class TidyConsoleCmd : AbstractConsoleCmd
         if (args.FirstOrDefault()?.ToLowerInvariant() == "slosh")
         {
             return Slosh(args.Skip(1).FirstOrDefault());
+        }
+
+        if (args.FirstOrDefault()?.ToLowerInvariant() == "splash")
+        {
+            return Splash(args.Skip(1).FirstOrDefault());
         }
 
         NPotionContainer? container = NRun.Instance?.GlobalUi?.TopBar?.PotionContainer;
@@ -48,7 +54,7 @@ public class TidyConsoleCmd : AbstractConsoleCmd
                 return new CmdResult(success: true, BeltOrder.Diagnostics(container));
 
             default:
-                return new CmdResult(success: false, "Use: tidy diag, tidy apply, tidy slosh <n>.");
+                return new CmdResult(success: false, "Use: tidy diag, tidy apply, tidy slosh <n>, tidy splash <n>.");
         }
     }
 
@@ -69,11 +75,23 @@ public class TidyConsoleCmd : AbstractConsoleCmd
         return new CmdResult(success: true, $"Playing slosh {n} ({clips[n - 1]}) at pitch {HoldToDiscard.SloshPitch}.");
     }
 
+    private static CmdResult Splash(string? arg)
+    {
+        string[] events = HoldToDiscard.SplashEvents;
+        if (!int.TryParse(arg, out int n) || n < 1 || n > events.Length)
+        {
+            return new CmdResult(success: false, $"Use: tidy splash <1-{events.Length}>.");
+        }
+
+        HoldToDiscard.PlaySplash(events[n - 1]);
+        return new CmdResult(success: true, $"Playing splash {n}: {events[n - 1].Substring(events[n - 1].LastIndexOf('/') + 1)}.");
+    }
+
     public override CompletionResult GetArgumentCompletions(Player? player, string[] args)
     {
         if (args.Length <= 1)
         {
-            return CompleteArgument(new[] { "diag", "apply", "slosh" }, System.Array.Empty<string>(), args.FirstOrDefault() ?? "");
+            return CompleteArgument(new[] { "diag", "apply", "slosh", "splash" }, System.Array.Empty<string>(), args.FirstOrDefault() ?? "");
         }
 
         return new CompletionResult { Type = CompletionType.Argument, ArgumentContext = CmdName };

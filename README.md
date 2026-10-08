@@ -10,8 +10,8 @@ next free space on the right.
 
 The Discard button in a potion's popup now has to be **held for one second**. A red fill sweeps
 across the button and the potion sloshes while you hold it; let go early (or slide off the
-button) and the sound stops and nothing happens. No more losing a potion to a misclick. Works
-with a controller too: hold select.
+button) and the sound stops and nothing happens. Hold the full second and a splat confirms the
+discard. No more losing a potion to a misclick. Works with a controller too: hold select.
 
 ## Co-op safe
 
@@ -31,7 +31,8 @@ With any mod loaded, the game's dev console (backtick) is unlocked:
 
 - `tidy diag`: shows the real slots next to the on-screen order.
 - `tidy apply`: forces a re-sort.
-- `tidy slosh <n>`: plays discard slosh sound n.
+- `tidy slosh <n>`: plays discard slosh sound n (1-2).
+- `tidy splash <n>`: plays discard-complete sound n (1-2).
 
 ## Licence
 

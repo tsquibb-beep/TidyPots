@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Nodes.Audio;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Potions;
 
@@ -44,6 +45,19 @@ internal static class HoldToDiscard
     private const float SloshPitchVariance = 0.05f;
 
     private const double SloshFadeSeconds = 0.06;
+
+    /// <summary>
+    /// The "it's gone" sound after a completed discard, picked at random. FMOD has no potion or
+    /// splash event; these two were chosen by ear from ~20 liquid-sounding enemy sounds.
+    /// `tidy splash n` plays entry n.
+    /// </summary>
+    public static readonly string[] SplashEvents =
+    {
+        "event:/sfx/enemy/enemy_attacks/sludge_spinner/sludge_spinner_attack_dash",
+        "event:/sfx/enemy/enemy_attacks/sludge_spinner/sludge_spinner_attack_spin",
+    };
+
+    private const float SplashVolume = 1f;
 
     /// <summary>The bus NDebugAudioManager plays these on; it follows the game's SFX volume.</summary>
     private static readonly StringName SfxBus = new("SFX");
@@ -101,6 +115,12 @@ internal static class HoldToDiscard
         {
             Log.Error($"[TidyPots] Failed to start hold-to-discard: {ex}");
         }
+    }
+
+    /// <summary>Plays a splash as a one-shot through the game's FMOD bridge.</summary>
+    public static void PlaySplash(string fmodEvent)
+    {
+        NAudioManager.Instance?.PlayOneShot(fmodEvent, SplashVolume);
     }
 
     /// <summary>Plays one slosh clip on a self-freeing player under <paramref name="parent"/>.</summary>
@@ -171,6 +191,7 @@ internal static class HoldToDiscard
                 {
                     Finish();
                     Fire();
+                    PlaySplash(SplashEvents[Random.Shared.Next(SplashEvents.Length)]);
                 }
             }
             catch (Exception ex)
