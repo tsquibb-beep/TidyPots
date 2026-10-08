@@ -1,6 +1,8 @@
 using System;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Assets;
+using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -14,7 +16,8 @@ namespace TidyPots;
 ///
 /// The game discards on the button's Released signal. That handler is blocked unless we call it
 /// ourselves, and a hold that completes calls the game's own handler, so the discard still goes
-/// through the normal networked action. A red fill sweeps across the button while it is held.
+/// through the normal networked action. A red fill sweeps across the button while it is held, and
+/// one of the game's own potion sloshes plays (cut off if the hold is let go).
 /// </summary>
 [HarmonyPatch]
 internal static class HoldToDiscard
@@ -24,6 +27,18 @@ internal static class HoldToDiscard
     private const double RetractSeconds = 0.12;
 
     private static readonly Color FillColor = new(0.85f, 0.2f, 0.15f, 0.65f);
+
+    /// <summary>The game plays these at 0.5 when a potion is hovered and 0.3 at combat start.</summary>
+    private const float SloshVolume = 0.6f;
+
+    /// <summary>The game's PitchVariance.Large. The clips run 0.60–0.78s, so even at the lowest
+    /// pitch a slosh ends before the hold completes.</summary>
+    private const float SloshPitchVariance = 0.1f;
+
+    private const double SloshFadeSeconds = 0.06;
+
+    /// <summary>The bus NDebugAudioManager plays these on; it follows the game's SFX volume.</summary>
+    private static readonly StringName SfxBus = new("SFX");
 
     private static readonly AccessTools.FieldRef<NClickableControl, bool> IsPressed =
         AccessTools.FieldRefAccess<NClickableControl, bool>("_isPressed");
@@ -90,6 +105,7 @@ internal static class HoldToDiscard
         private readonly Control? _clip;
         private readonly float _fullWidth;
         private readonly Action _tick;
+        private readonly AudioStreamPlayer? _sound;
         private bool _done;
 
         public Hold(NPotionPopup popup, NPotionPopupButton button, bool byMouse)
@@ -100,6 +116,7 @@ internal static class HoldToDiscard
             _startMs = Time.GetTicksMsec();
             _tree = button.GetTree();
             (_clip, _fullWidth) = CreateFill(button);
+            _sound = PlaySlosh(button);
             // One delegate instance, so the -= in Finish disconnects exactly what was connected.
             _tick = Tick;
             _tree.ProcessFrame += _tick;
@@ -197,11 +214,61 @@ internal static class HoldToDiscard
         private void Finish()
         {
             _done = true;
+            StopSlosh();
             _tree.ProcessFrame -= _tick;
             if (_current == this)
             {
                 _current = null;
             }
+        }
+
+        /// <summary>
+        /// One of the potion sloshes the game itself plays on hover, on a player of our own parented
+        /// to the button: stoppable, and freed with the popup. NDebugAudioManager is avoided because
+        /// its Stop logs a warning once a sound has already finished.
+        /// </summary>
+        private static AudioStreamPlayer? PlaySlosh(NPotionPopupButton button)
+        {
+            try
+            {
+                string[] clips = System.Linq.Enumerable.ToArray(TmpSfx.PotionSlosh);
+                string clip = clips[Random.Shared.Next(clips.Length)];
+                var player = new AudioStreamPlayer
+                {
+                    Stream = PreloadManager.Cache.GetAsset<AudioStream>(TmpSfx.GetPath(clip)),
+                    Bus = SfxBus,
+                    VolumeLinear = SloshVolume,
+                    PitchScale = 1f + (float)(Random.Shared.NextDouble() * 2 - 1) * SloshPitchVariance,
+                };
+                player.Finished += player.QueueFree;
+                button.AddChild(player);
+                player.Play();
+                return player;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[TidyPots] Could not play the discard slosh: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>Cuts the slosh off with a very short fade, so letting go does not click.</summary>
+        private void StopSlosh()
+        {
+            if (_sound == null || !GodotObject.IsInstanceValid(_sound) || _sound.IsQueuedForDeletion())
+            {
+                return;
+            }
+
+            if (!_sound.Playing || !_sound.IsInsideTree())
+            {
+                _sound.QueueFree();
+                return;
+            }
+
+            Tween tween = _sound.CreateTween();
+            tween.TweenProperty(_sound, "volume_linear", 0f, SloshFadeSeconds);
+            tween.TweenCallback(Callable.From(_sound.QueueFree));
         }
 
         /// <summary>

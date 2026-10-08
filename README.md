@@ -9,8 +9,9 @@ next free space on the right.
 ## Hold to discard
 
 The Discard button in a potion's popup now has to be **held for one second**. A red fill sweeps
-across the button while you hold it; let go early (or slide off the button) and nothing
-happens. No more losing a potion to a misclick. Works with a controller too: hold select.
+across the button and the potion sloshes while you hold it; let go early (or slide off the
+button) and the sound stops and nothing happens. No more losing a potion to a misclick. Works
+with a controller too: hold select.
 
 ## Co-op safe
 
