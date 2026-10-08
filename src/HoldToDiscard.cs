@@ -29,6 +29,15 @@ internal static class HoldToDiscard
 
     private static readonly Color FillColor = new(0.85f, 0.2f, 0.15f, 0.65f);
 
+    /// <summary>
+    /// The text outline that sweeps in with the fill. The game's Discard label is red with a 50% black
+    /// outline (size 12) and is drawn *under* the button background, so the red fill drowned it; the
+    /// swept copy sits on top with a solid outline in the cream the Use label is written in.
+    /// </summary>
+    private static readonly Color TextOutlineColor = new(1f, 0.9647059f, 0.8862745f, 1f);
+
+    private const int TextOutlineSize = 12;
+
     /// <summary>The game plays these at 0.5 when a potion is hovered and 0.3 at combat start.</summary>
     private const float SloshVolume = 0.6f;
 
@@ -146,7 +155,8 @@ internal static class HoldToDiscard
         private readonly bool _byMouse;
         private readonly ulong _startMs;
         private readonly SceneTree _tree;
-        private readonly Control? _clip;
+        /// <summary>Clipping controls that all reveal left to right with the hold, in step.</summary>
+        private readonly System.Collections.Generic.List<Control> _clips;
         private readonly float _fullWidth;
         private readonly Action _tick;
         private readonly AudioStreamPlayer? _sound;
@@ -159,7 +169,7 @@ internal static class HoldToDiscard
             _byMouse = byMouse;
             _startMs = Time.GetTicksMsec();
             _tree = button.GetTree();
-            (_clip, _fullWidth) = CreateFill(button);
+            (_clips, _fullWidth) = CreateSweep(button);
             _sound = PlaySlosh(button);
             // One delegate instance, so the -= in Finish disconnects exactly what was connected.
             _tick = Tick;
@@ -182,9 +192,12 @@ internal static class HoldToDiscard
                 }
 
                 double progress = Math.Min(1.0, (Time.GetTicksMsec() - _startMs) / 1000.0 / HoldSeconds);
-                if (_clip != null && GodotObject.IsInstanceValid(_clip))
+                foreach (Control clip in _clips)
                 {
-                    _clip.Size = new Vector2(_fullWidth * (float)progress, _clip.Size.Y);
+                    if (GodotObject.IsInstanceValid(clip))
+                    {
+                        clip.Size = new Vector2(_fullWidth * (float)progress, clip.Size.Y);
+                    }
                 }
 
                 if (progress >= 1.0)
@@ -240,20 +253,23 @@ internal static class HoldToDiscard
             }
 
             Finish();
-            if (_clip == null || !GodotObject.IsInstanceValid(_clip))
+            foreach (Control clip in _clips)
             {
-                return;
-            }
+                if (!GodotObject.IsInstanceValid(clip))
+                {
+                    continue;
+                }
 
-            if (!_clip.IsInsideTree())
-            {
-                _clip.QueueFree();
-                return;
-            }
+                if (!clip.IsInsideTree())
+                {
+                    clip.QueueFree();
+                    continue;
+                }
 
-            Tween tween = _clip.CreateTween();
-            tween.TweenProperty(_clip, "size:x", 0f, RetractSeconds).SetTrans(Tween.TransitionType.Sine);
-            tween.TweenCallback(Callable.From(_clip.QueueFree));
+                Tween tween = clip.CreateTween();
+                tween.TweenProperty(clip, "size:x", 0f, RetractSeconds).SetTrans(Tween.TransitionType.Sine);
+                tween.TweenCallback(Callable.From(clip.QueueFree));
+            }
         }
 
         private void Finish()
@@ -307,25 +323,19 @@ internal static class HoldToDiscard
         }
 
         /// <summary>
-        /// A copy of the button's own background texture, tinted red, inside a clipping control
-        /// whose width grows with the hold — so the fill follows the button's shape. It sits
-        /// just above the background, under the label.
+        /// Builds the two layers that sweep in with the hold, each inside its own clipping control
+        /// spanning the background's x range so both edges move together:
+        /// a red copy of the button's background texture (follows the button's shape), just above
+        /// the background; and an outlined copy of the label on top of everything.
         /// </summary>
-        private static (Control?, float) CreateFill(NPotionPopupButton button)
+        private static (System.Collections.Generic.List<Control>, float) CreateSweep(NPotionPopupButton button)
         {
+            var clips = new System.Collections.Generic.List<Control>();
             TextureRect? background = button.GetNodeOrNull<TextureRect>("Background");
             if (background == null)
             {
-                return (null, 0f);
+                return (clips, 0f);
             }
-
-            var clip = new Control
-            {
-                ClipContents = true,
-                MouseFilter = Control.MouseFilterEnum.Ignore,
-                Position = background.Position,
-                Size = new Vector2(0f, background.Size.Y),
-            };
 
             var fill = new TextureRect
             {
@@ -340,11 +350,62 @@ internal static class HoldToDiscard
                 Position = Vector2.Zero,
                 Size = background.Size,
             };
+            Control fillClip = AddClip(button, background.Position, background.Size.Y, fill);
+            button.MoveChild(fillClip, background.GetIndex() + 1);
+            clips.Add(fillClip);
 
-            clip.AddChild(fill);
-            button.AddChild(clip);
-            button.MoveChild(clip, background.GetIndex() + 1);
-            return (clip, background.Size.X);
+            Label? label = button.GetNodeOrNull<Label>("Label");
+            if (label != null)
+            {
+                var clipOrigin = new Vector2(background.Position.X, label.Position.Y);
+                Label text = OutlinedCopy(label);
+                text.Position = label.Position - clipOrigin;
+                clips.Add(AddClip(button, clipOrigin, label.Size.Y, text));
+            }
+
+            return (clips, background.Size.X);
+        }
+
+        private static Control AddClip(Control parent, Vector2 position, float height, Control content)
+        {
+            var clip = new Control
+            {
+                ClipContents = true,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                Position = position,
+                Size = new Vector2(0f, height),
+            };
+            clip.AddChild(content);
+            parent.AddChild(clip);
+            return clip;
+        }
+
+        /// <summary>
+        /// A stock Label matching the game's MegaLabel as currently laid out (its auto-sized font size
+        /// and locale font are read back off it), with our outline. Not a MegaLabel: it asserts a
+        /// theme font in _Ready and would re-run its own sizing.
+        /// </summary>
+        private static Label OutlinedCopy(Label label)
+        {
+            var copy = new Label
+            {
+                Text = label.Text,
+                HorizontalAlignment = label.HorizontalAlignment,
+                VerticalAlignment = label.VerticalAlignment,
+                AutowrapMode = label.AutowrapMode,
+                Uppercase = label.Uppercase,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                Size = label.Size,
+                Modulate = label.Modulate,
+                SelfModulate = label.SelfModulate,
+            };
+            copy.AddThemeFontOverride("font", label.GetThemeFont("font"));
+            copy.AddThemeFontSizeOverride("font_size", label.GetThemeFontSize("font_size"));
+            copy.AddThemeColorOverride("font_color", label.GetThemeColor("font_color"));
+            copy.AddThemeColorOverride("font_outline_color", TextOutlineColor);
+            copy.AddThemeConstantOverride("outline_size", TextOutlineSize);
+            copy.AddThemeConstantOverride("shadow_outline_size", 0);
+            return copy;
         }
     }
 }
