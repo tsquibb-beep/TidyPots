@@ -31,9 +31,17 @@ internal static class HoldToDiscard
     /// <summary>The game plays these at 0.5 when a potion is hovered and 0.3 at combat start.</summary>
     private const float SloshVolume = 0.6f;
 
-    /// <summary>The game's PitchVariance.Large. The clips run 0.60–0.78s, so even at the lowest
-    /// pitch a slosh ends before the hold completes.</summary>
-    private const float SloshPitchVariance = 0.1f;
+    /// <summary>
+    /// The game has three slosh clips (0.60/0.78/0.60s). potion_slosh_3 is left out: by ear it lacks
+    /// the glug the others have. `tidy slosh n` plays clip n of this list.
+    /// </summary>
+    public static readonly string[] SloshClips = { "potion_slosh_1.mp3", "potion_slosh_2.mp3" };
+
+    /// <summary>Below the game's 1.0 for more of a glug. Lower pitch also stretches the clip: at the
+    /// bottom of the range the longest runs ~1.04s and is faded out when the hold completes.</summary>
+    public const float SloshPitch = 0.8f;
+
+    private const float SloshPitchVariance = 0.05f;
 
     private const double SloshFadeSeconds = 0.06;
 
@@ -93,6 +101,22 @@ internal static class HoldToDiscard
         {
             Log.Error($"[TidyPots] Failed to start hold-to-discard: {ex}");
         }
+    }
+
+    /// <summary>Plays one slosh clip on a self-freeing player under <paramref name="parent"/>.</summary>
+    public static AudioStreamPlayer PlayClip(Node parent, string clip, float pitch)
+    {
+        var player = new AudioStreamPlayer
+        {
+            Stream = PreloadManager.Cache.GetAsset<AudioStream>(TmpSfx.GetPath(clip)),
+            Bus = SfxBus,
+            VolumeLinear = SloshVolume,
+            PitchScale = pitch,
+        };
+        player.Finished += player.QueueFree;
+        parent.AddChild(player);
+        player.Play();
+        return player;
     }
 
     private sealed class Hold
@@ -231,19 +255,9 @@ internal static class HoldToDiscard
         {
             try
             {
-                string[] clips = System.Linq.Enumerable.ToArray(TmpSfx.PotionSlosh);
-                string clip = clips[Random.Shared.Next(clips.Length)];
-                var player = new AudioStreamPlayer
-                {
-                    Stream = PreloadManager.Cache.GetAsset<AudioStream>(TmpSfx.GetPath(clip)),
-                    Bus = SfxBus,
-                    VolumeLinear = SloshVolume,
-                    PitchScale = 1f + (float)(Random.Shared.NextDouble() * 2 - 1) * SloshPitchVariance,
-                };
-                player.Finished += player.QueueFree;
-                button.AddChild(player);
-                player.Play();
-                return player;
+                string clip = SloshClips[Random.Shared.Next(SloshClips.Length)];
+                float pitch = SloshPitch + (float)(Random.Shared.NextDouble() * 2 - 1) * SloshPitchVariance;
+                return PlayClip(button, clip, pitch);
             }
             catch (Exception ex)
             {

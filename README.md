@@ -31,6 +31,7 @@ With any mod loaded, the game's dev console (backtick) is unlocked:
 
 - `tidy diag`: shows the real slots next to the on-screen order.
 - `tidy apply`: forces a re-sort.
+- `tidy slosh <n>`: plays discard slosh sound n.
 
 ## Licence
 

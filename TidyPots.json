@@ -3,7 +3,7 @@
     "name": "TidyPots",
     "author": "Tomasapan",
     "description": "Closes the gaps in your potion belt (potions always sit packed to the left) and makes Discard a 1-second hold so a stray click cannot throw a potion away. Safe in co-op.",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "has_pck": false,
     "has_dll": true,
     "dependencies": [],
