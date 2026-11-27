@@ -24,7 +24,7 @@ the game's own. Other players don't need the mod.
 
 ## Compatibility
 
-Built against Slay the Spire 2 v0.107.1. The game is in Early Access and updates can break mods.
+Built against Slay the Spire 2 v0.111.1. The game is in Early Access and updates can break mods.
 
 ## Install
 
